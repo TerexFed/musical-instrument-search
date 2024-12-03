@@ -1,65 +1,11 @@
-// import {KeyValueStore, PlaywrightCrawler} from 'crawlee';
-//
-// let userInput = ''
-//
-// await KeyValueStore.getInput().then(res => userInput = res)
-//
-// console.log(`You want to find - ${userInput.search}`)
-//
-// const crawler = new PlaywrightCrawler({
-//     requestHandler: async ({page, pushData, request}) => {
-//         console.log(`Processing ${page.url()}`)
-//
-//         let productsSelector = ''
-//         let productSelector = ''
-//         let productTextSelector = ''
-//         let productPriceSelector = ''
-//
-//         if(request.uniqueKey.includes('muztorg')){
-//              productsSelector = '.catalog-listing'
-//              productSelector = '.catalog-card'
-//              productTextSelector = '.catalog-card__info > .catalog-card__name'
-//              productPriceSelector = '.catalog-card__price'
-//         }
-//         else if(request.uniqueKey.includes('gitaraclub')) {
-//
-//              productsSelector = '.catalogList'
-//              productSelector = '.catalogEl'
-//              productTextSelector = '.catalogElContent > .catalogElTitle'
-//              productPriceSelector = '.catalogElContent > .catalogElPrice'
-//         }
-//
-//             const products = await page.waitForSelector(productsSelector)
-//
-//             const product = await products.waitForSelector(productSelector)
-//
-//             const productText = await product.waitForSelector(productTextSelector)
-//             const productPrice = await product.waitForSelector(productPriceSelector)
-//
-//             const productTextData = await productText.textContent()
-//             const productPriceData = await productPrice.textContent()
-//
-//             await pushData({
-//                 'productName': productTextData?.trim(),
-//                 'productPrice': productPriceData?.trim()
-//             })
-//
-//         }
-//
-// })
-//
-//
-// await crawler.run([`https://www.muztorg.ru/search/${userInput.search}`, `https://gitaraclub.ru/search/?q=${userInput.search}`])
-
-import { PlaywrightCrawler } from 'crawlee';
+import { PuppeteerCrawler } from 'crawlee';
 import * as cheerio from 'cheerio';
 
-export const runCrawler = async (userInput: string) => {
-
+export const runCrawler = async (userInput:string) => {
     console.log(`You want to find - ${userInput}`);
 
     const siteConfigs = {
-        'muztorg': {
+        "https://www.muztorg.ru": {
             url: `https://www.muztorg.ru/search/${userInput}`,
             selectors: {
                 productsSelector: '.catalog-listing',
@@ -69,7 +15,7 @@ export const runCrawler = async (userInput: string) => {
                 productLinkSelector: '.catalog-card__main > .catalog-card__link',
             }
         },
-        'gitaraclub': {
+        "https://gitaraclub.ru": {
             url: `https://gitaraclub.ru/search/?q=${userInput}`,
             selectors: {
                 productsSelector: '.catalogList',
@@ -78,53 +24,102 @@ export const runCrawler = async (userInput: string) => {
                 productPriceSelector: '.catalogElContent > .catalogElPrice',
                 productLinkSelector: '.catalogElImg',
             }
+        },
+        "https://skifmusic.ru": {
+            url: `https://skifmusic.ru/search/${userInput.replace(' ', '+')}`,
+            selectors: {
+                productsSelector: 'div.cards-list',
+                productSelector: 'div.product-card',
+                productTextSelector: '.product-card__info-block > a',
+                productPriceSelector: '.product-card__price',
+                productLinkSelector: '.product-card__info-block > a',
+            }
+        },
+        "https://pop-music.ru": {
+            url: `https://pop-music.ru/search/?q=${userInput.replace(' ', '+')}`,
+            selectors: {
+                productsSelector: 'div.products-grid',
+                productSelector: '.products-grid__i > div.product-card',
+                productTextSelector: '.product-card__name',
+                productPriceSelector: '.product-card__price',
+                productLinkSelector: '.product-card__name',
+            }
         }
     };
 
-
-    const urls = Object.values(siteConfigs).map(config => config.url);
-
     const results: Array<{ website: string; productName: string; productPrice: string, productLink: string, error?: string }> = [];
 
-    const crawler = new PlaywrightCrawler({
-        requestHandler: async ({page, request}) => {
-            console.log(`Processing ${request.url}`)
+    const urls = Object.values(siteConfigs).map((config) => config.url);
 
-            const basePath = request.url.split('/search')[0]
+    const crawler = new PuppeteerCrawler({
+        maxConcurrency: 5,
+        launchContext: {
+            launchOptions: {
+                headless: true,
+                args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            },
+        },
+        requestHandler: async ({ page, request }) => {
+            console.log(`Processing ${request.url}`);
 
+            const selectors = request.userData?.selectors;
 
-            const siteConfig = Object.values(siteConfigs).find(config => request.url.startsWith(config.url.split('?')[0]))
-            if (!siteConfig) {
-                console.log(`No configuration found for ${request.url}`);
+            if (!selectors) {
+                console.error(`No selectors found for ${request.url}`);
                 return;
             }
 
-            const {productsSelector, productSelector, productTextSelector, productPriceSelector, productLinkSelector} = siteConfig.selectors;
+            const { productsSelector, productSelector, productTextSelector, productPriceSelector, productLinkSelector } = selectors;
 
-            const html = await page.content()
-            const $ = cheerio.load(html)
+            const baseUrl:string = request.url.split('/search')[0]
 
-            $(productsSelector).find(productSelector).each((_, element) => {
-                const productName = $(element).find(productTextSelector).text().trim();
-                const productPrice = $(element).find(productPriceSelector).text().trim();
-                const productLink = $(element).find(productLinkSelector).attr('href')
-
-                if (productName && productPrice){
-                    results.push({
-                        website: basePath,
-                        productLink: basePath + productLink,
-                        productName,
-                        productPrice,
-                    })
+            await page.setRequestInterception(true);
+            page.on('request', (req) => {
+                const resourceType = req.resourceType();
+                if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
+                    req.abort();
+                } else {
+                    req.continue();
                 }
-
             });
 
-        }
+            const html = await page.content();
+            const $ = cheerio.load(html);
+
+            $(productsSelector).find(productSelector).each((_, el) => {
+                const productName = $(el).find(productTextSelector).text().trim();
+
+                const productPrice = $(el).find(productPriceSelector).text().trim();
+
+                const productLink = $(el).find(productLinkSelector).attr('href');
+
+                if (productName && productPrice) {
+                    if (productName.toLowerCase().includes(userInput.toLowerCase())) {
+                        results.push({
+                            website: baseUrl,
+                            productName,
+                            productPrice,
+                            productLink: baseUrl + productLink,
+                        });
+                    }
+                }
+            });
+        },
+        failedRequestHandler: async ({ request }) => {
+            console.error(`Request failed: ${request.url}`);
+        },
     });
 
-    await crawler.run(urls)
+    for (const [url, config] of Object.entries(siteConfigs)) {
+        await crawler.addRequests([
+            {
+                url: config.url,
+                userData: { selectors: config.selectors },
+            },
+        ]);
+    }
 
-    return results
+    await crawler.run();
 
-}
+    return results;
+};
