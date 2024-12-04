@@ -4,7 +4,7 @@ export const runCrawler = async (userInput) => {
     console.log(`You want to find - ${userInput}`);
     const siteConfigs = {
         "https://www.muztorg.ru": {
-            url: `https://www.muztorg.ru/search/${userInput}`,
+            url: `https://www.muztorg.ru/search/${userInput.replaceAll(' ', '%20')}`,
             selectors: {
                 productsSelector: '.catalog-listing',
                 productSelector: '.catalog-card',
@@ -14,7 +14,7 @@ export const runCrawler = async (userInput) => {
             }
         },
         "https://gitaraclub.ru": {
-            url: `https://gitaraclub.ru/search/?q=${userInput}`,
+            url: `https://gitaraclub.ru/search/?q=${userInput.replaceAll(' ', '+')}`,
             selectors: {
                 productsSelector: '.catalogList',
                 productSelector: '.catalogEl',
@@ -24,7 +24,7 @@ export const runCrawler = async (userInput) => {
             }
         },
         "https://skifmusic.ru": {
-            url: `https://skifmusic.ru/search/${userInput.replace(' ', '+')}`,
+            url: `https://skifmusic.ru/search/${userInput.replaceAll(' ', '+')}`,
             selectors: {
                 productsSelector: 'div.cards-list',
                 productSelector: 'div.product-card',
@@ -34,7 +34,7 @@ export const runCrawler = async (userInput) => {
             }
         },
         "https://pop-music.ru": {
-            url: `https://pop-music.ru/search/?q=${userInput.replace(' ', '+')}`,
+            url: `https://pop-music.ru/search/?q=${userInput.replaceAll(' ', '+')}`,
             selectors: {
                 productsSelector: 'div.products-grid',
                 productSelector: '.products-grid__i > div.product-card',
@@ -42,16 +42,24 @@ export const runCrawler = async (userInput) => {
                 productPriceSelector: '.product-card__price',
                 productLinkSelector: '.product-card__name',
             }
-        }
+        },
+        "https://jazz-shop.ru": {
+            url: `https://jazz-shop.ru/search?search=${userInput.replaceAll(' ', '+')}`,
+            selectors: {
+                productsSelector: 'div.catalog-products',
+                productSelector: 'div.product-trumb',
+                productTextSelector: 'div.product-trumb-name > a > span',
+                productPriceSelector: 'div.product-trumb-price > div.price-product > div.price-block',
+                productLinkSelector: 'div.product-trumb-name > a',
+            }
+        },
     };
     const results = [];
-    const urls = Object.values(siteConfigs).map((config) => config.url);
     const crawler = new PuppeteerCrawler({
-        maxConcurrency: 5,
         launchContext: {
             launchOptions: {
                 headless: true,
-                args: ['--no-sandbox', '--disable-setuid-sandbox'],
+                args: ['--no-sandbox', '--disable-setuid-sandbox', '--dns-prefetch-disable', '--disk-cache-size=50000'],
             },
         },
         requestHandler: async ({ page, request }) => {
@@ -66,26 +74,29 @@ export const runCrawler = async (userInput) => {
             await page.setRequestInterception(true);
             page.on('request', (req) => {
                 const resourceType = req.resourceType();
-                if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
+                if (['image', 'stylesheet', 'font', 'media', 'xhr', 'manifest', 'script'].includes(resourceType)) {
                     req.abort();
                 }
                 else {
                     req.continue();
                 }
             });
-            const html = await page.content();
-            const $ = cheerio.load(html);
-            $(productsSelector).find(productSelector).each((_, el) => {
+            await page.setJavaScriptEnabled(false);
+            await page.goto(request.url, { waitUntil: 'domcontentloaded' });
+            await page.waitForSelector(productsSelector);
+            const productsHTML = await page.$eval(productsSelector, (el) => el.innerHTML);
+            const $ = cheerio.load(productsHTML);
+            $(productSelector).each((_, el) => {
                 const productName = $(el).find(productTextSelector).text().trim();
                 const productPrice = $(el).find(productPriceSelector).text().trim();
                 const productLink = $(el).find(productLinkSelector).attr('href');
                 if (productName && productPrice) {
-                    if (productName.toLowerCase().includes(userInput.toLowerCase())) {
+                    if (productName.toLowerCase().includes(userInput.toLowerCase().split(' ')[1], 0)) {
                         results.push({
                             website: baseUrl,
                             productName,
                             productPrice,
-                            productLink: baseUrl + productLink,
+                            productLink: request.url.includes('skifmusic') ? productLink : baseUrl + productLink,
                         });
                     }
                 }
@@ -99,7 +110,7 @@ export const runCrawler = async (userInput) => {
         await crawler.addRequests([
             {
                 url: config.url,
-                userData: { selectors: config.selectors }, // Ensure selectors are passed
+                userData: { selectors: config.selectors },
             },
         ]);
     }

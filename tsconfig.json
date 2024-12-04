@@ -7,6 +7,6 @@
 		"outDir": "./dist",
 		"esModuleInterop": true,
 		"noUnusedLocals": false,
-		"lib": ["DOM"]
+		"lib": ["DOM", "ES2021"]
 	}
 }
