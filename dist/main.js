@@ -63,6 +63,7 @@ export const runCrawler = async (userInput) => {
             },
         },
         requestHandler: async ({ page, request }) => {
+            request.noRetry = true;
             console.log(`Processing ${request.url}`);
             const selectors = request.userData?.selectors;
             if (!selectors) {
@@ -83,15 +84,28 @@ export const runCrawler = async (userInput) => {
             });
             await page.setJavaScriptEnabled(false);
             await page.goto(request.url, { waitUntil: 'domcontentloaded' });
-            await page.waitForSelector(productsSelector);
+            try {
+                await page.waitForSelector(productsSelector, { timeout: 5000 });
+            }
+            catch (err) {
+                console.log(`No products found on ${request.url}. Skipping this website.`);
+                return;
+            }
             const productsHTML = await page.$eval(productsSelector, (el) => el.innerHTML);
+            if (!productsHTML || productsHTML.trim().length === 0) {
+                console.log(`No product data found for ${request.url}. Skipping.`);
+                request.noRetry;
+                return;
+            }
             const $ = cheerio.load(productsHTML);
+            let foundProducts = false;
             $(productSelector).each((_, el) => {
                 const productName = $(el).find(productTextSelector).text().trim();
                 const productPrice = $(el).find(productPriceSelector).text().trim();
                 const productLink = $(el).find(productLinkSelector).attr('href');
                 if (productName && productPrice) {
                     if (productName.toLowerCase().includes(userInput.toLowerCase().split(' ')[1], 0)) {
+                        foundProducts = true;
                         results.push({
                             website: baseUrl,
                             productName,
@@ -101,6 +115,9 @@ export const runCrawler = async (userInput) => {
                     }
                 }
             });
+            if (!foundProducts) {
+                console.log(`No matching products found for ${request.url}.`);
+            }
         },
         failedRequestHandler: async ({ request }) => {
             console.error(`Request failed: ${request.url}`);

@@ -1,7 +1,7 @@
 import { PuppeteerCrawler } from 'crawlee';
 import * as cheerio from 'cheerio';
 
-export const runCrawler = async (userInput:string) => {
+export const runCrawler = async (userInput: string) => {
     console.log(`You want to find - ${userInput}`);
 
     const siteConfigs = {
@@ -67,6 +67,8 @@ export const runCrawler = async (userInput:string) => {
             },
         },
         requestHandler: async ({ page, request }) => {
+            request.noRetry = true
+            
             console.log(`Processing ${request.url}`);
 
             const selectors = request.userData?.selectors;
@@ -78,7 +80,7 @@ export const runCrawler = async (userInput:string) => {
 
             const { productsSelector, productSelector, productTextSelector, productPriceSelector, productLinkSelector } = selectors;
 
-            const baseUrl:string = request.url.split('/search')[0]
+            const baseUrl: string = request.url.split('/search')[0]
 
             await page.setRequestInterception(true);
             page.on('request', (req) => {
@@ -88,14 +90,28 @@ export const runCrawler = async (userInput:string) => {
                 } else {
                     req.continue();
                 }
-            });      
+            });
 
             await page.setJavaScriptEnabled(false)
-            await page.goto(request.url, {waitUntil: 'domcontentloaded'})
-            await page.waitForSelector(productsSelector)
+            await page.goto(request.url, { waitUntil: 'domcontentloaded' })
 
-            const productsHTML = await page.$eval(productsSelector, (el) => el.innerHTML)
+            try {
+                await page.waitForSelector(productsSelector, { timeout: 5000 }); 
+            } catch (err) {
+                console.log(`No products found on ${request.url}. Skipping this website.`);
+                return;
+            }
+
+            const productsHTML = await page.$eval(productsSelector, (el) => el.innerHTML);
+            if (!productsHTML || productsHTML.trim().length === 0) {
+                console.log(`No product data found for ${request.url}. Skipping.`);
+                request.noRetry
+                return;
+            }
+
             const $ = cheerio.load(productsHTML);
+
+            let foundProducts = false;
 
             $(productSelector).each((_, el) => {
                 const productName = $(el).find(productTextSelector).text().trim();
@@ -106,7 +122,8 @@ export const runCrawler = async (userInput:string) => {
 
                 if (productName && productPrice) {
                     if (productName.toLowerCase().includes(userInput.toLowerCase().split(' ')[1], 0)) {
-                        
+                        foundProducts = true
+
                         results.push({
                             website: baseUrl,
                             productName,
@@ -116,6 +133,11 @@ export const runCrawler = async (userInput:string) => {
                     }
                 }
             });
+            if (!foundProducts) {
+                console.log(`No matching products found for ${request.url}.`);
+            }
+
+
         },
         failedRequestHandler: async ({ request }) => {
             console.error(`Request failed: ${request.url}`);
