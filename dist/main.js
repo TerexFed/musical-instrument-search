@@ -1,7 +1,8 @@
 import { PuppeteerCrawler } from 'crawlee';
 import * as cheerio from 'cheerio';
-export const runCrawler = async (userInput) => {
+export const runCrawler = async (userInput, session, eventEmitter) => {
     console.log(`You want to find - ${userInput}`);
+    const userInputWords = userInput.split(' ');
     const siteConfigs = {
         "https://www.muztorg.ru": {
             url: `https://www.muztorg.ru/search/${userInput.replaceAll(' ', '%20')}`,
@@ -53,13 +54,39 @@ export const runCrawler = async (userInput) => {
                 productLinkSelector: 'div.product-trumb-name > a',
             }
         },
+        "https://www.dj-store.ru": {
+            url: `https://www.dj-store.ru/search/?q=${userInput.replaceAll(' ', '+')}`,
+            selectors: {
+                productsSelector: '#cat-items',
+                productSelector: 'div.product_item',
+                productTextSelector: 'div.list-center > div > a',
+                productPriceSelector: 'div.list-right > div.list-right-wrapper > p.price',
+                productLinkSelector: 'a.img',
+            }
+        },
+        "https://epimusic.ru": {
+            url: `https://epimusic.ru/search/?q=${userInput.replaceAll(' ', '+')}`,
+            selectors: {
+                productsSelector: 'div.productList',
+                productSelector: 'div.productTable',
+                productTextSelector: 'div.productColText > a.name > span',
+                productPriceSelector: 'div.productColText > a.price',
+                productLinkSelector: 'div.productColText > a.name',
+            }
+        },
     };
     const results = [];
     const crawler = new PuppeteerCrawler({
         launchContext: {
             launchOptions: {
                 headless: true,
-                args: ['--no-sandbox', '--disable-setuid-sandbox', '--dns-prefetch-disable', '--disk-cache-size=50000'],
+                args: ['--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--dns-prefetch-disable',
+                    '--disable-gpu',
+                    '--disable-software-rasterizer',
+                    '--disable-extensions',
+                    '--disable-dev-shm-usage',],
             },
         },
         requestHandler: async ({ page, request }) => {
@@ -83,9 +110,10 @@ export const runCrawler = async (userInput) => {
                 }
             });
             await page.setJavaScriptEnabled(false);
+            await page.setCacheEnabled(false);
             await page.goto(request.url, { waitUntil: 'domcontentloaded' });
             try {
-                await page.waitForSelector(productsSelector, { timeout: 5000 });
+                await page.waitForSelector(productsSelector, { timeout: 3000 });
             }
             catch (err) {
                 console.log(`No products found on ${request.url}. Skipping this website.`);
@@ -104,14 +132,17 @@ export const runCrawler = async (userInput) => {
                 const productPrice = $(el).find(productPriceSelector).text().trim();
                 const productLink = $(el).find(productLinkSelector).attr('href');
                 if (productName && productPrice) {
-                    if (productName.toLowerCase().includes(userInput.toLowerCase().split(' ')[1], 0)) {
+                    const productNameWords = productName.toLowerCase().split(' ');
+                    if (userInputWords.every((wordUI) => productNameWords.some((wordPN) => wordPN.includes(wordUI)))) {
                         foundProducts = true;
-                        results.push({
+                        const result = {
                             website: baseUrl,
                             productName,
                             productPrice,
                             productLink: request.url.includes('skifmusic') ? productLink : baseUrl + productLink,
-                        });
+                        };
+                        eventEmitter.emit('newResult', result);
+                        console.log(`Sending result to session ID: ${session.id}`, result);
                     }
                 }
             });

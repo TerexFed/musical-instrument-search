@@ -1,4 +1,4 @@
-export declare const runCrawler: (userInput: string) => Promise<{
+export declare const runCrawler: (userInput: string, session: any, eventEmitter: any) => Promise<{
     website: string;
     productName: string;
     productPrice: string;
