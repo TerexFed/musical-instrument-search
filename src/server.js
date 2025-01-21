@@ -12,10 +12,10 @@ app.use(cors());
 
 const cache = new NodeCache({ stdTTL: 3600 });
 
-// Session middleware
+
 app.use(
   session({
-    secret: "123", // Use a strong secret in production
+    secret: "123", 
     resave: false,
     saveUninitialized: true,
   })
@@ -23,7 +23,7 @@ app.use(
 
 app.use(bodyParser.json());
 
-// Endpoint for starting the search
+
 app.get("/search", async (req, res) => {
   const { userInput } = req.query;
   const TuserInput = userInput.toLocaleLowerCase();
@@ -43,7 +43,7 @@ app.get("/search", async (req, res) => {
 
   const cachedResults = cache.get(TuserInput);
   if (cachedResults) {
-    // Return cached results via SSE
+ 
     res.write(`data: {"message": "Returning cached results"}\n\n`);
     cachedResults.forEach((result) => {
       const eventData = JSON.stringify(result);
@@ -51,11 +51,11 @@ app.get("/search", async (req, res) => {
       res.write(`data: ${eventData}\n\n`);
     });
 
-    res.write(`data: {"done": true}\n\n`); // Indicate completion
-    return res.end(); // End response
+    res.write(`data: {"done": true}\n\n`); 
+    return res.end(); 
   }
 
-  // Send an initial message
+
   res.write(
     `data: {"message": "Search started, results will be sent in real time."}\n\n`
   );
@@ -63,21 +63,22 @@ app.get("/search", async (req, res) => {
   try {
     const eventEmitter = new EventEmitter();
 
-    // Listen for results from the crawler
+
     eventEmitter.on("newResult", (result) => {
       const eventData = JSON.stringify(result);
       req.session.results.push(result);
+      
       const currentCached = cache.get(TuserInput) || [];
       cache.set(TuserInput, [...currentCached, result]);
       res.write(`data: ${eventData}\n\n`);
     });
 
     eventEmitter.on("done", () => {
-      res.write(`data: {"done": true}\n\n`); // Send "done" message to indicate completion
-      res.end(); // End the response when done
+      res.write(`data: {"done": true}\n\n`); 
+      res.end(); 
     });
 
-    // Run the crawler, passing the session ID for real-time updates
+    
     await runCrawler(TuserInput, req.session, eventEmitter);
   } catch (error) {
     console.error("Error running crawler:", error);

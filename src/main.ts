@@ -66,16 +66,6 @@ export const runCrawler = async (userInput: string, session: any, eventEmitter: 
                 productLinkSelector: 'a.img',
             }
         },
-        "https://epimusic.ru": {
-            url: `https://epimusic.ru/search/?q=${userInput.replaceAll(' ', '+')}`,
-            selectors: {
-                productsSelector: 'div.productList',
-                productSelector: 'div.productTable',
-                productTextSelector: 'div.productColText > a.name > span',
-                productPriceSelector: 'div.productColText > a.price',
-                productLinkSelector: 'div.productColText > a.name',
-            }
-        },
     };
 
     const results: Array<{ website: string; productName: string; productPrice: string, productLink: string, error?: string }> = [];
@@ -157,12 +147,12 @@ export const runCrawler = async (userInput: string, session: any, eventEmitter: 
 
                     if (userInputWords.every((wordUI) => productNameWords.some((wordPN) => wordPN.includes(wordUI)))) {
                         foundProducts = true
-
+                        
                         const result = {
                             website: baseUrl,
                             productName,
                             productPrice,
-                            productLink: request.url.includes('skifmusic') ? productLink! : baseUrl + productLink,
+                            productLink: request.url.includes('skifmusic') || request.url.includes('jazz-shop') ? productLink! : baseUrl + productLink,
                         };
 
 

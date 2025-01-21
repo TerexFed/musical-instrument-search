@@ -64,16 +64,6 @@ export const runCrawler = async (userInput, session, eventEmitter) => {
                 productLinkSelector: 'a.img',
             }
         },
-        "https://epimusic.ru": {
-            url: `https://epimusic.ru/search/?q=${userInput.replaceAll(' ', '+')}`,
-            selectors: {
-                productsSelector: 'div.productList',
-                productSelector: 'div.productTable',
-                productTextSelector: 'div.productColText > a.name > span',
-                productPriceSelector: 'div.productColText > a.price',
-                productLinkSelector: 'div.productColText > a.name',
-            }
-        },
     };
     const results = [];
     const crawler = new PuppeteerCrawler({
@@ -139,7 +129,7 @@ export const runCrawler = async (userInput, session, eventEmitter) => {
                             website: baseUrl,
                             productName,
                             productPrice,
-                            productLink: request.url.includes('skifmusic') ? productLink : baseUrl + productLink,
+                            productLink: request.url.includes('skifmusic') || request.url.includes('jazz-shop') ? productLink : baseUrl + productLink,
                         };
                         eventEmitter.emit('newResult', result);
                         console.log(`Sending result to session ID: ${session.id}`, result);
