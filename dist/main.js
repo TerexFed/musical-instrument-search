@@ -103,7 +103,7 @@ export const runCrawler = async (userInput, session, eventEmitter) => {
             await page.setCacheEnabled(false);
             await page.goto(request.url, { waitUntil: 'domcontentloaded' });
             try {
-                await page.waitForSelector(productsSelector, { timeout: 3000 });
+                await page.waitForSelector(productsSelector, { timeout: 5000 });
             }
             catch (err) {
                 console.log(`No products found on ${request.url}. Skipping this website.`);
@@ -153,6 +153,7 @@ export const runCrawler = async (userInput, session, eventEmitter) => {
         ]);
     }
     await crawler.run();
+    eventEmitter.emit('done');
     return results;
 };
 //# sourceMappingURL=main.js.map

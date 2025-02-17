@@ -115,7 +115,7 @@ export const runCrawler = async (userInput: string, session: any, eventEmitter: 
             await page.goto(request.url, { waitUntil: 'domcontentloaded' })
 
             try {
-                await page.waitForSelector(productsSelector, { timeout: 3000 });
+                await page.waitForSelector(productsSelector, { timeout: 5000 });
             } catch (err) {
                 console.log(`No products found on ${request.url}. Skipping this website.`);
                 return;
@@ -183,6 +183,6 @@ export const runCrawler = async (userInput: string, session: any, eventEmitter: 
     }
 
     await crawler.run();
-
+    eventEmitter.emit('done')
     return results;
 };
