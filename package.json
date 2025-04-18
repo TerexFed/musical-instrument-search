@@ -9,6 +9,7 @@
         "crawlee": "^3.0.0",
         "express": "^4.21.1",
         "express-session": "^1.18.1",
+        "jsonwebtoken": "^9.0.2",
         "node-cache": "^5.1.2",
         "playwright": "*",
         "puppeteer": "^23.9.0"
